@@ -1,0 +1,181 @@
+server:
+  port: 8352
+  shutdown: graceful
+  netty:
+    connection-timeout: 2s
+    idle-timeout: 15s
+
+spring:
+  application:
+    name: mail-service
+  lifecycle:
+    timeout-per-shutdown-phase: 15s
+  config:
+    import: "optional:configserver:"   # Imports configuration data from a config server when available
+  cloud:
+    config:
+      uri: http://localhost:8071
+      request-connect-timeout: 5000   # Timeout on waiting to connect to the config server (ms)
+      request-read-timeout: 5000      # Timeout on waiting to read configuration data from the config server (ms)
+      fail-fast: true                 # In production, set to true. Makes a failure to connect to the config server fatal
+      retry:
+        max-attempts: 6
+        initial-interval: 1000        # Initial retry interval for backoff (ms)
+        max-interval: 2000            # Maximum retry interval for backoff (ms)
+        multiplier: 1.1               # Multiplier to compute the next interval
+    loadbalancer:
+      ribbon:
+        enabled: false
+    function:
+      definition: consumerMail;consumerSparkMail
+    stream:
+      default:
+        producer:
+          useNativeEncoding: true
+        consumer:
+          useNativeDecoding: true
+      function:
+        definition: consumerMail;consumerSparkMail;producer;producerMailTest;producerSparkMailTest
+      kafka:
+        binder:
+          brokers: http://localhost:9092
+        bindings:
+          producer-out-0:
+            producer:
+              configuration:
+                key.serializer: org.apache.kafka.common.serialization.StringSerializer
+                value.serializer: com.ailegorreta.commons.event.EventDTOSerializer
+          producerMailTest-out-0:
+            producer:
+              configuration:
+                key.serializer: org.apache.kafka.common.serialization.StringSerializer
+                value.serializer: com.ailegorreta.commons.event.EventDTOSerializer
+          producerSparkMailTest-out-0:
+            producer:
+              configuration:
+                key.serializer: org.apache.kafka.common.serialization.StringSerializer
+                value.serializer: org.apache.kafka.common.serialization.StringSerializer
+          consumerMail-in-0:
+            consumer:
+              configuration:
+                key.deserializer: org.apache.kafka.common.serialization.StringDeserializer
+                value.deserializer: com.ailegorreta.commons.event.EventDTODeSerializer
+          consumerSparkMail-in-0:
+            consumer:
+              configuration:
+                key.deserializer: org.apache.kafka.common.serialization.StringDeserializer
+                value.deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      bindings:
+        producer-out-0:
+          destination: mail-audit
+        producerMailTest-out-0:
+          destination: sendMail
+        producerSparkMailTest-out-0:
+          destination: sendSparkMail
+        consumerMail-in-0:
+          destination: sendMail           # no '-audit' prefix
+          group: group-mail-service
+        consumerSparkMail-in-0:
+          destination: sendSparkMail      # no '-audit' prefix
+          group: group-mail-service
+  profiles:
+    active: local
+  security:
+    oauth2:
+      client:
+        registration:
+          mail-service-client-credentials:
+            provider: spring
+            client-id: mail-service
+            client-secret: mail-service-secret
+            authorization-grant-type: client_credentials
+            scope: sys.facultad,acme.facultad,iam.facultad,iam.compania,cartera.read
+            client-name: mail-service-client-credentials
+        provider:
+          spring:
+            issuer-uri: http://auth-service:9000
+            # ^ for localNoDocker & localCmdLine an 'auth' must be declared in hosts file
+        rest:
+          client-id: mail-service-client-credentials
+      resourceserver:
+        jwt:
+          issuer-uri: http://auth-service:9000
+  mail:
+    host: localhost
+    port: 1025
+    username: admin.test@ailegorreta
+    password: test
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            checkserveridentity: false
+          starttls:
+            enable: true
+
+
+# Also needed by AuthServerUserLookupService
+security:
+  clientId: mail-service
+
+#Back-end microservices
+microservice:
+  param:
+    provider-uri: http://localhost:8072/param           # use the gateway
+    # provider-uri: http://param-service:8350             # no use gateway, because is backoffice microservice communication
+
+# Alfresco content management server
+alfresco:
+  url: http://localhost:8080/alfresco/api/-default-/cmis/versions/1.1/atom
+  # url: http://host.docker.internal:8080/alfresco/api/-default-/cmis/versions/1.1/atom
+  username: uname
+  password: password
+  company: ACME     # This is the parent folder for all files
+
+logging:
+  level:
+    com:
+      netflix: WARN
+      springframework:
+        web: WARN
+        core:
+          codec:
+            StringDecoder: TRACE
+      ailegorreta:
+        mailservice: DEBUG
+  pattern:
+    level: '%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]'
+
+info:
+  system: Marketplace AILegorreta
+
+# Monitoring with actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: mail, env, health, heapdump, info, loggers, mappings, prometheus
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+      probes:
+        enabled: true
+  mail:
+    host: localhost
+    port: 1025
+    username: admin.test@ailegorreta
+    password: test
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            checkserveridentity: false
+          starttls:
+            enable: true
+
+mail-service:
+  test: false
+  from: admin.test@ailegorreta

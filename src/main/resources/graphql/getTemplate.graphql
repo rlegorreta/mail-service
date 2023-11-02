@@ -1,0 +1,14 @@
+query getTemplates($input: String) {
+  templates(nombre: $input) {
+    id
+    nombre
+    fileRepo
+    destino
+    json
+    blockly
+    fechaCreacion
+    fechaModificacion
+    autor
+    activo
+  }
+}
